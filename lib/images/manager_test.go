@@ -701,7 +701,6 @@ func TestDeleteAndRecreateDuringBuildTail(t *testing.T) {
 		t.Fatal("recreated image never became ready")
 	}
 
-	got, err := m.GetImage(ctx, repo+":"+tag)
-	require.NoError(t, err)
-	assert.Equal(t, StatusReady, got.Status)
+	// The ready signal precedes the tag symlink, so poll rather than GET once.
+	waitForReady(t, m, ctx, repo+":"+tag)
 }
