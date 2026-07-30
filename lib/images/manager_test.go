@@ -613,3 +613,95 @@ func waitForReady(t *testing.T, mgr Manager, ctx context.Context, imageName stri
 
 	t.Fatal("Build did not complete within 60 seconds")
 }
+
+// TestDeleteAndRecreateDuringBuildTail exercises the race where a delete +
+// recreate lands between a build's ready signal and its queue-slot release:
+// the digest is still marked active in the build queue, and the recreated
+// image must still build and become ready.
+func TestDeleteAndRecreateDuringBuildTail(t *testing.T) {
+	// Use the pure-Go cpio exporter so the test needs no mkfs.erofs binary.
+	origFormat := DefaultImageFormat
+	DefaultImageFormat = FormatCpio
+	defer func() { DefaultImageFormat = origFormat }()
+
+	dataDir := t.TempDir()
+	p := paths.New(dataDir)
+
+	// Seed the OCI cache with a synthetic image so builds need no network.
+	testImg := createTestDockerImage(t)
+	imgDigest, err := testImg.Digest()
+	require.NoError(t, err)
+	digestStr := imgDigest.String()
+
+	cacheDir := p.SystemOCICache()
+	layoutPath, err := layout.Write(cacheDir, empty.Index)
+	require.NoError(t, err)
+	require.NoError(t, layoutPath.AppendImage(testImg, layout.WithAnnotations(map[string]string{
+		"org.opencontainers.image.ref.name": digestToLayoutTag(digestStr),
+	})))
+
+	client, err := newOCIClient(cacheDir)
+	require.NoError(t, err)
+
+	m := &manager{
+		paths:            p,
+		ociClient:        client,
+		queue:            NewBuildQueue(1),
+		readySubscribers: make(map[string][]chan StatusEvent),
+	}
+
+	ctx := context.Background()
+	const repo = "kernel.local/test/recreate-race"
+	const tag = "v1"
+	digestHex := digestToLayoutTag(digestStr)
+
+	events := make(chan StatusEvent, 2)
+	m.subscribeToReady(digestHex, events)
+	defer m.unsubscribeFromReady(digestHex, events)
+
+	_, err = m.ImportLocalImage(ctx, repo, tag, digestStr)
+	require.NoError(t, err)
+
+	select {
+	case ev := <-events:
+		require.Equal(t, StatusReady, ev.Status)
+	case <-time.After(30 * time.Second):
+		t.Fatal("first build did not become ready")
+	}
+
+	// Hold the digest's queue slot as a build in its tail would: terminal
+	// signal sent, slot not yet released.
+	slotHeld := make(chan struct{})
+	releaseSlot := make(chan struct{})
+	m.queue.Enqueue(digestStr, CreateImageRequest{}, func() {
+		close(slotHeld)
+		<-releaseSlot
+	})
+	select {
+	case <-slotHeld:
+	case <-time.After(5 * time.Second):
+		t.Fatal("queue slot was not held")
+	}
+
+	// Delete and recreate while the slot is held: the recreate must queue
+	// behind the in-flight entry instead of being dropped.
+	require.NoError(t, m.DeleteImage(ctx, repo+":"+tag))
+	recreated, err := m.ImportLocalImage(ctx, repo, tag, digestStr)
+	require.NoError(t, err)
+	require.Equal(t, StatusPending, recreated.Status)
+	require.NotNil(t, recreated.QueuePosition)
+	close(releaseSlot)
+
+	// The recreated build must run and signal ready; before the fix it was
+	// swallowed by the still-active queue entry and never started.
+	select {
+	case ev := <-events:
+		require.Equal(t, StatusReady, ev.Status)
+	case <-time.After(10 * time.Second):
+		t.Fatal("recreated image never became ready")
+	}
+
+	got, err := m.GetImage(ctx, repo+":"+tag)
+	require.NoError(t, err)
+	assert.Equal(t, StatusReady, got.Status)
+}

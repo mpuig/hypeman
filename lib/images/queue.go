@@ -28,15 +28,14 @@ func NewBuildQueue(maxConcurrent int) *BuildQueue {
 }
 
 // Enqueue adds a build to the queue. Returns queue position (0 if started immediately, >0 if queued).
-// If the image is already building or queued, returns its current position without re-enqueueing.
+// If the image is already queued, returns its current position without re-enqueueing.
+// If the image is still marked active, the build is queued behind the in-flight one
+// rather than dropped: the active build may have signalled readiness without having
+// released its slot yet, and dropping a fresh request here leaves recreated images
+// pending forever.
 func (q *BuildQueue) Enqueue(imageName string, req CreateImageRequest, startFn func()) int {
 	q.mu.Lock()
 	defer q.mu.Unlock()
-
-	// Check if already building (position 0, actively running)
-	if q.active[imageName] {
-		return 0
-	}
 
 	// Check if already in pending queue
 	for i, build := range q.pending {
@@ -57,7 +56,7 @@ func (q *BuildQueue) Enqueue(imageName string, req CreateImageRequest, startFn f
 		StartFn:   wrappedFn,
 	}
 
-	if len(q.active) < q.maxConcurrent {
+	if len(q.active) < q.maxConcurrent && !q.active[imageName] {
 		q.active[imageName] = true
 		go wrappedFn()
 		return 0
@@ -85,10 +84,8 @@ func (q *BuildQueue) GetPosition(imageName string) *int {
 	q.mu.Lock()
 	defer q.mu.Unlock()
 
-	if q.active[imageName] {
-		return nil
-	}
-
+	// An image can be active (earlier build finishing) and pending at once;
+	// report the pending position, which is what a waiter observes.
 	for i, build := range q.pending {
 		if build.ImageName == imageName {
 			pos := i + 1
