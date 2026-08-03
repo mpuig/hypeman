@@ -573,6 +573,8 @@ func TestConfigFilePermTooOpen(t *testing.T) {
 
 func TestLoadSucceedsWithWorldReadableConfigFile(t *testing.T) {
 	clearPathEnvOverrides(t)
+	// Env overrides beat the config file; clear JWT_SECRET so the file value wins.
+	t.Setenv("JWT_SECRET", "")
 
 	tmp := t.TempDir()
 	cfgPath := filepath.Join(tmp, "config.yaml")

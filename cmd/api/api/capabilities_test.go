@@ -61,11 +61,17 @@ func TestGetCapabilities(t *testing.T) {
 	require.Equal(t, runtime.GOOS, caps.Host.Os)
 	require.Equal(t, runtime.GOARCH, caps.Host.Arch)
 
-	// Effective default runtime and its capabilities
+	// Effective default runtime and its capabilities. The test-service manager
+	// defaults to cloud-hypervisor; on macOS that default cannot run, so the
+	// endpoint must report zeroed runtime features rather than overstate.
 	require.Equal(t, string(hypervisor.TypeCloudHypervisor), caps.Runtime.Default)
 	require.NotEmpty(t, caps.Runtime.Supported)
-	require.Contains(t, caps.Runtime.Supported, caps.Runtime.Default)
-	if runtime.GOOS == "linux" {
+	if runtime.GOOS == "darwin" {
+		require.Equal(t, []string{string(hypervisor.TypeVZ)}, caps.Runtime.Supported)
+		require.False(t, caps.Runtime.Standby, "unusable default runtime must not advertise standby")
+		require.False(t, caps.Runtime.Snapshot)
+	} else {
+		require.Contains(t, caps.Runtime.Supported, caps.Runtime.Default)
 		chCaps := cloudHypervisorCaps(t)
 		require.Equal(t, chCaps.SupportsSnapshot, caps.Runtime.Snapshot)
 		require.Equal(t, chCaps.SupportsPause, caps.Runtime.Pause)
@@ -86,7 +92,10 @@ func TestGetCapabilities(t *testing.T) {
 	for _, f := range []string{"instances", "images", "builds", "volumes", "ingress", "exec", "logs"} {
 		require.Contains(t, caps.Features, f)
 	}
-	if runtime.GOOS == "linux" {
+	if runtime.GOOS == "darwin" {
+		require.NotContains(t, caps.Features, "devices")
+		require.NotContains(t, caps.Features, "standby")
+	} else {
 		require.Contains(t, caps.Features, "standby")
 		require.Contains(t, caps.Features, "devices")
 	}

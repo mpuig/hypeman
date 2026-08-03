@@ -3,6 +3,7 @@ package api
 import (
 	"context"
 	"runtime"
+	"slices"
 	"sync"
 
 	"github.com/kernel/hypeman/lib/hypervisor"
@@ -55,12 +56,18 @@ func (s *ApiService) GetCapabilities(ctx context.Context, _ oapi.GetCapabilities
 	if s.InstanceManager != nil {
 		defaultRuntime = s.InstanceManager.DefaultHypervisor()
 	}
+	supported := supportedRuntimes(runtime.GOOS)
 	caps, capsKnown := hypervisor.CapabilitiesForType(defaultRuntime)
+	if capsKnown && !slices.Contains(supported, string(defaultRuntime)) {
+		// The configured default runtime cannot run on this host platform;
+		// advertising its features would overstate support.
+		capsKnown = false
+	}
 	if !capsKnown {
-		// The configured default runtime is not available on this platform;
-		// report zeroed features rather than guessing.
-		log.WarnContext(ctx, "default runtime has no registered capabilities on this host",
-			"runtime", string(defaultRuntime))
+		// Report zeroed features rather than guessing.
+		log.WarnContext(ctx, "default runtime is not usable on this host platform",
+			"runtime", string(defaultRuntime), "host_os", runtime.GOOS)
+		caps = hypervisor.Capabilities{}
 	}
 
 	emulation := emulationSupported(runtime.GOOS, runtime.GOARCH, defaultRuntime)
@@ -85,7 +92,7 @@ func (s *ApiService) GetCapabilities(ctx context.Context, _ oapi.GetCapabilities
 		},
 		Runtime: oapi.CapabilitiesRuntime{
 			Default:        string(defaultRuntime),
-			Supported:      supportedRuntimes(runtime.GOOS),
+			Supported:      supported,
 			Snapshot:       caps.SupportsSnapshot,
 			Standby:        standbySupported(caps),
 			Pause:          caps.SupportsPause,
