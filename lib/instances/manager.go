@@ -311,6 +311,9 @@ func NewManagerWithConfigE(p *paths.Paths, imageManager images.Manager, systemMa
 	// Restrict permissions on metadata written by older versions (may be 0644
 	// and contains env values / credential bindings).
 	m.tightenMetadataPermissions()
+	// Restrict permissions on guest config disks written by older versions
+	// (may be 0644 and embed config.json with env values).
+	m.tightenConfigDiskPermissions()
 
 	return m, nil
 }

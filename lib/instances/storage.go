@@ -154,6 +154,33 @@ func (m *manager) tightenMetadataPermissions() {
 	}
 }
 
+// tightenConfigDiskPermissions restricts existing guest config disk files to
+// owner-only access. Disks written before restrictive permissions were
+// introduced may be mode 0644; they embed config.json with environment values.
+// Best-effort: individual failures are logged, not fatal.
+func (m *manager) tightenConfigDiskPermissions() {
+	log := logger.FromContext(context.Background())
+	entries, err := os.ReadDir(m.paths.GuestsDir())
+	if err != nil {
+		return // no guests directory yet
+	}
+	for _, entry := range entries {
+		if !entry.IsDir() {
+			continue
+		}
+		configDiskPath := m.paths.InstanceConfigDisk(entry.Name())
+		info, err := os.Stat(configDiskPath)
+		if err != nil {
+			continue
+		}
+		if info.Mode().Perm() != 0600 {
+			if err := os.Chmod(configDiskPath, 0600); err != nil {
+				log.Warn("failed to tighten instance config disk permissions", "path", configDiskPath, "error", err)
+			}
+		}
+	}
+}
+
 // createOverlayDisk creates a sparse overlay disk for the instance
 func (m *manager) createOverlayDisk(id string, sizeBytes int64) error {
 	overlayPath := m.paths.InstanceOverlay(id)

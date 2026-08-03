@@ -86,6 +86,26 @@ func TestManagerTightensLegacyMetadataPermissions(t *testing.T) {
 		"legacy 0644 metadata must be tightened to 0600 at startup")
 }
 
+// TestManagerTightensLegacyConfigDiskPermissions proves the startup sweep
+// upgrades config disks written by older versions (mode 0644) to 0600.
+func TestManagerTightensLegacyConfigDiskPermissions(t *testing.T) {
+	t.Parallel()
+	dataDir := t.TempDir()
+	p := paths.New(dataDir)
+	id := "inst-config-disk-legacy"
+
+	// Simulate a legacy config disk written with world-readable permissions.
+	require.NoError(t, os.MkdirAll(p.InstanceDir(id), 0755))
+	require.NoError(t, os.WriteFile(p.InstanceConfigDisk(id), []byte("ext4-bytes-placeholder"), 0644))
+
+	newPermTestManager(t, dataDir)
+
+	info, err := os.Stat(p.InstanceConfigDisk(id))
+	require.NoError(t, err)
+	require.Equal(t, os.FileMode(0600), info.Mode().Perm(),
+		"legacy 0644 config disks must be tightened to 0600 at startup")
+}
+
 // TestMergeEnvUpdateSkipsRedactionSentinel proves a redacted read response
 // round-tripped into an env update cannot clobber real secret values.
 func TestMergeEnvUpdateSkipsRedactionSentinel(t *testing.T) {
