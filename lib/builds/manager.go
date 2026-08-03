@@ -168,7 +168,42 @@ func NewManager(
 		m.metrics = metrics
 	}
 
+	// Restrict permissions on build files written by older versions (may be
+	// 0644 and carry registry tokens / build args).
+	m.tightenBuildFilePermissions()
+
 	return m, nil
+}
+
+// tightenBuildFilePermissions restricts existing build config and metadata
+// files to owner-only access. Files written before restrictive permissions
+// were introduced may be mode 0644; build configs carry the registry push
+// token and metadata embeds the original request. Best-effort: individual
+// failures are logged, not fatal.
+func (m *manager) tightenBuildFilePermissions() {
+	entries, err := os.ReadDir(m.paths.BuildsDir())
+	if err != nil {
+		return // no builds directory yet
+	}
+	for _, entry := range entries {
+		if !entry.IsDir() {
+			continue
+		}
+		for _, path := range []string{
+			m.paths.BuildConfig(entry.Name()),
+			m.paths.BuildMetadata(entry.Name()),
+		} {
+			info, err := os.Stat(path)
+			if err != nil {
+				continue
+			}
+			if info.Mode().Perm() != 0600 {
+				if err := os.Chmod(path, 0600); err != nil {
+					m.logger.Warn("failed to tighten build file permissions", "path", path, "error", err)
+				}
+			}
+		}
+	}
 }
 
 // Start starts the build manager's background services
