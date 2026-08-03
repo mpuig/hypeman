@@ -111,6 +111,19 @@ func TestSupportedRuntimes(t *testing.T) {
 	require.Equal(t, []string{"vz"}, supportedRuntimes("darwin"))
 }
 
+func TestRuntimeSupported(t *testing.T) {
+	t.Parallel()
+	require.True(t, runtimeSupported(hypervisor.TypeVZ, supportedRuntimes("darwin")))
+	require.False(t, runtimeSupported(hypervisor.TypeCloudHypervisor, supportedRuntimes("darwin")))
+}
+
+func TestCapabilitiesForDefaultRuntime_IgnoresUnsupportedRuntime(t *testing.T) {
+	t.Parallel()
+	caps, ok := capabilitiesForDefaultRuntime(hypervisor.TypeCloudHypervisor, supportedRuntimes("darwin"))
+	require.False(t, ok)
+	require.Equal(t, hypervisor.Capabilities{}, caps)
+}
+
 func TestEmulationSupported(t *testing.T) {
 	t.Parallel()
 	require.True(t, emulationSupported("darwin", "arm64", hypervisor.TypeVZ))

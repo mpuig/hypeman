@@ -237,6 +237,9 @@ func writeBuildConfig(p *paths.Paths, id string, config *BuildConfig) error {
 	if err := os.WriteFile(configPath, data, 0600); err != nil {
 		return fmt.Errorf("write build config: %w", err)
 	}
+	if err := os.Chmod(configPath, 0600); err != nil {
+		return fmt.Errorf("chmod build config: %w", err)
+	}
 
 	return nil
 }

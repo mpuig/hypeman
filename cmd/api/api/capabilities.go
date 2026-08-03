@@ -55,12 +55,14 @@ func (s *ApiService) GetCapabilities(ctx context.Context, _ oapi.GetCapabilities
 	if s.InstanceManager != nil {
 		defaultRuntime = s.InstanceManager.DefaultHypervisor()
 	}
-	caps, capsKnown := hypervisor.CapabilitiesForType(defaultRuntime)
+	supported := supportedRuntimes(runtime.GOOS)
+	caps, capsKnown := capabilitiesForDefaultRuntime(defaultRuntime, supported)
 	if !capsKnown {
-		// The configured default runtime is not available on this platform;
+		// The configured default runtime is not usable on this host;
 		// report zeroed features rather than guessing.
-		log.WarnContext(ctx, "default runtime has no registered capabilities on this host",
-			"runtime", string(defaultRuntime))
+		log.WarnContext(ctx, "default runtime has no usable capabilities on this host",
+			"runtime", string(defaultRuntime),
+			"supported", supported)
 	}
 
 	emulation := emulationSupported(runtime.GOOS, runtime.GOARCH, defaultRuntime)
@@ -85,7 +87,7 @@ func (s *ApiService) GetCapabilities(ctx context.Context, _ oapi.GetCapabilities
 		},
 		Runtime: oapi.CapabilitiesRuntime{
 			Default:        string(defaultRuntime),
-			Supported:      supportedRuntimes(runtime.GOOS),
+			Supported:      supported,
 			Snapshot:       caps.SupportsSnapshot,
 			Standby:        standbySupported(caps),
 			Pause:          caps.SupportsPause,
@@ -155,6 +157,23 @@ func supportedRuntimes(goos string) []string {
 			string(hypervisor.TypeQEMU),
 		}
 	}
+}
+
+func capabilitiesForDefaultRuntime(defaultRuntime hypervisor.Type, supported []string) (hypervisor.Capabilities, bool) {
+	if !runtimeSupported(defaultRuntime, supported) {
+		return hypervisor.Capabilities{}, false
+	}
+	return hypervisor.CapabilitiesForType(defaultRuntime)
+}
+
+func runtimeSupported(defaultRuntime hypervisor.Type, supported []string) bool {
+	defaultRuntimeName := string(defaultRuntime)
+	for _, runtimeName := range supported {
+		if runtimeName == defaultRuntimeName {
+			return true
+		}
+	}
+	return false
 }
 
 // emulationSupported reports whether the host can boot images built for the
