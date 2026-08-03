@@ -127,10 +127,11 @@ func (m *manager) saveMetadata(meta *metadata) error {
 	return nil
 }
 
-// tightenMetadataPermissions restricts existing instance metadata files to
-// owner-only access. Metadata written before restrictive permissions were
-// introduced may be mode 0644; it contains env values and credential
-// bindings. Best-effort: individual failures are logged, not fatal.
+// tightenMetadataPermissions restricts existing instance metadata and guest
+// config disk files to owner-only access. Files written before restrictive
+// permissions were introduced may be mode 0644; both embed env values (and
+// metadata also carries credential bindings). Best-effort: individual
+// failures are logged, not fatal.
 func (m *manager) tightenMetadataPermissions() {
 	log := logger.FromContext(context.Background())
 	entries, err := os.ReadDir(m.paths.GuestsDir())
@@ -141,14 +142,18 @@ func (m *manager) tightenMetadataPermissions() {
 		if !entry.IsDir() {
 			continue
 		}
-		metaPath := m.paths.InstanceMetadata(entry.Name())
-		info, err := os.Stat(metaPath)
-		if err != nil {
-			continue
-		}
-		if info.Mode().Perm() != 0600 {
-			if err := os.Chmod(metaPath, 0600); err != nil {
-				log.Warn("failed to tighten instance metadata permissions", "path", metaPath, "error", err)
+		for _, path := range []string{
+			m.paths.InstanceMetadata(entry.Name()),
+			m.paths.InstanceConfigDisk(entry.Name()),
+		} {
+			info, err := os.Stat(path)
+			if err != nil {
+				continue
+			}
+			if info.Mode().Perm() != 0600 {
+				if err := os.Chmod(path, 0600); err != nil {
+					log.Warn("failed to tighten instance file permissions", "path", path, "error", err)
+				}
 			}
 		}
 	}

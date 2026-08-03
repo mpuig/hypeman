@@ -65,25 +65,29 @@ func TestSaveMetadataRestrictivePermissions(t *testing.T) {
 }
 
 // TestManagerTightensLegacyMetadataPermissions proves the startup sweep
-// upgrades metadata files written by older versions (mode 0644) to 0600.
+// upgrades metadata and config disk files written by older versions (mode
+// 0644) to 0600.
 func TestManagerTightensLegacyMetadataPermissions(t *testing.T) {
 	t.Parallel()
 	dataDir := t.TempDir()
 	p := paths.New(dataDir)
 
-	// Simulate legacy metadata written with world-readable permissions.
+	// Simulate legacy files written with world-readable permissions.
 	meta := metadataFixture("inst-perms-legacy")
 	require.NoError(t, os.MkdirAll(p.InstanceDir(meta.Id), 0755))
 	data, err := json.MarshalIndent(meta, "", "  ")
 	require.NoError(t, err)
 	require.NoError(t, os.WriteFile(p.InstanceMetadata(meta.Id), data, 0644))
+	require.NoError(t, os.WriteFile(p.InstanceConfigDisk(meta.Id), []byte("ext4-bytes"), 0644))
 
 	newPermTestManager(t, dataDir)
 
-	info, err := os.Stat(p.InstanceMetadata(meta.Id))
-	require.NoError(t, err)
-	require.Equal(t, os.FileMode(0600), info.Mode().Perm(),
-		"legacy 0644 metadata must be tightened to 0600 at startup")
+	for _, path := range []string{p.InstanceMetadata(meta.Id), p.InstanceConfigDisk(meta.Id)} {
+		info, err := os.Stat(path)
+		require.NoError(t, err)
+		require.Equal(t, os.FileMode(0600), info.Mode().Perm(),
+			"legacy 0644 file must be tightened to 0600 at startup: %s", path)
+	}
 }
 
 // TestMergeEnvUpdateSkipsRedactionSentinel proves a redacted read response
