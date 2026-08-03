@@ -58,17 +58,10 @@ func writeMetadata(p *paths.Paths, meta *buildMetadata) error {
 		return fmt.Errorf("marshal metadata: %w", err)
 	}
 
-	// Write atomically via temp file. Build metadata embeds the original
-	// request (build args, secret references), so keep it owner-only.
+	// Write atomically via temp file
 	tempPath := p.BuildMetadata(meta.ID) + ".tmp"
-	if err := os.WriteFile(tempPath, data, 0600); err != nil {
+	if err := os.WriteFile(tempPath, data, 0644); err != nil {
 		return fmt.Errorf("write temp metadata: %w", err)
-	}
-	// WriteFile does not change permissions of an existing file; a leftover
-	// temp from an older 0644 write must not survive the rename readable.
-	if err := os.Chmod(tempPath, 0600); err != nil {
-		os.Remove(tempPath)
-		return fmt.Errorf("chmod temp metadata: %w", err)
 	}
 
 	finalPath := p.BuildMetadata(meta.ID)
@@ -239,14 +232,8 @@ func writeBuildConfig(p *paths.Paths, id string, config *BuildConfig) error {
 	}
 
 	configPath := p.BuildConfig(id)
-	// The build config carries the registry push token and build args.
-	if err := os.WriteFile(configPath, data, 0600); err != nil {
+	if err := os.WriteFile(configPath, data, 0644); err != nil {
 		return fmt.Errorf("write build config: %w", err)
-	}
-	// WriteFile does not change permissions of an existing file; token
-	// refresh rewrites the config in place, so enforce owner-only access.
-	if err := os.Chmod(configPath, 0600); err != nil {
-		return fmt.Errorf("chmod build config: %w", err)
 	}
 
 	return nil

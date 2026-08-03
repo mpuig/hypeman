@@ -2,7 +2,6 @@ package config
 
 import (
 	"fmt"
-	"log/slog"
 	"os"
 	"path/filepath"
 	"runtime"
@@ -517,8 +516,6 @@ func Load(configPath string) (*Config, error) {
 				return nil, fmt.Errorf("failed to load config from %s: %w", configPath, err)
 			}
 			// Auto-discovered path failed — continue with defaults + env
-		} else {
-			warnIfConfigFileWorldReadable(configPath)
 		}
 	}
 
@@ -542,29 +539,6 @@ func Load(configPath string) (*Config, error) {
 	cfg.expandPathFields()
 
 	return &cfg, nil
-}
-
-// configFilePermTooOpen reports whether a config file is readable or
-// writable by group or others. Config files typically carry jwt_secret and
-// other credentials, so they should be owner-only (0600).
-func configFilePermTooOpen(path string) bool {
-	info, err := os.Stat(path)
-	if err != nil {
-		return false
-	}
-	return info.Mode().Perm()&0o077 != 0
-}
-
-// warnIfConfigFileWorldReadable logs a warning when the config file (which
-// typically carries jwt_secret and other credentials) is accessible by group
-// or others. Hypeman never chmods operator-owned files; it only warns.
-func warnIfConfigFileWorldReadable(path string) {
-	if !configFilePermTooOpen(path) {
-		return
-	}
-	info, _ := os.Stat(path)
-	slog.Warn("config file is accessible by group or others; it may contain secrets — consider chmod 0600",
-		"path", path, "mode", info.Mode().Perm().String())
 }
 
 func (c *Config) expandPathFields() {

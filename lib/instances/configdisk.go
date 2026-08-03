@@ -32,7 +32,7 @@ func (m *manager) createConfigDisk(ctx context.Context, inst *Instance, imageInf
 		return fmt.Errorf("marshal config: %w", err)
 	}
 	configPath := filepath.Join(tmpDir, "config.json")
-	if err := os.WriteFile(configPath, configData, 0600); err != nil {
+	if err := os.WriteFile(configPath, configData, 0644); err != nil {
 		return fmt.Errorf("write config.json: %w", err)
 	}
 
@@ -41,11 +41,6 @@ func (m *manager) createConfigDisk(ctx context.Context, inst *Instance, imageInf
 	_, err = images.ExportRootfs(tmpDir, diskPath, images.FormatExt4)
 	if err != nil {
 		return fmt.Errorf("create config disk: %w", err)
-	}
-
-	// The config disk embeds config.json including environment values.
-	if err := os.Chmod(diskPath, 0600); err != nil {
-		return fmt.Errorf("chmod config disk: %w", err)
 	}
 
 	return nil

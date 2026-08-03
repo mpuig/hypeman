@@ -308,10 +308,6 @@ func NewManagerWithConfigE(p *paths.Paths, imageManager images.Manager, systemMa
 		logger.FromContext(context.Background()).WarnContext(context.Background(), "failed to recover pending standby compression jobs", "error", err)
 	}
 
-	// Restrict permissions on metadata written by older versions (may be 0644
-	// and contains env values / credential bindings).
-	m.tightenMetadataPermissions()
-
 	return m, nil
 }
 

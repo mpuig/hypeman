@@ -8,7 +8,6 @@ import (
 
 	"github.com/kernel/hypeman/lib/egressproxy"
 	"github.com/kernel/hypeman/lib/logger"
-	"github.com/kernel/hypeman/lib/redact"
 )
 
 type updateInstanceRulesService interface {
@@ -20,11 +19,6 @@ type updateInstanceRulesService interface {
 // values. Auto-standby updates only change persisted metadata.
 func (m *manager) updateInstance(ctx context.Context, id string, req UpdateInstanceRequest) (*Instance, error) {
 	log := logger.FromContext(ctx)
-
-	// Drop redaction sentinels up front: a read-modify-write that round-trips
-	// only redacted env values is not an env mutation, so it must not trigger
-	// the running-state requirement or the egress-proxy path.
-	req.Env = withoutRedactionSentinels(req.Env)
 
 	// 1. Load and validate current state
 	meta, err := m.loadMetadata(id)
@@ -88,7 +82,13 @@ func (m *manager) updateInstance(ctx context.Context, id string, req UpdateInsta
 	}
 
 	prevEnv := cloneEnvMap(nextMeta.Env)
-	nextEnv := mergeEnvUpdate(prevEnv, req.Env)
+	nextEnv := cloneEnvMap(nextMeta.Env)
+	if nextEnv == nil {
+		nextEnv = make(map[string]string)
+	}
+	for k, v := range req.Env {
+		nextEnv[k] = v
+	}
 
 	if err := validateCredentialEnvBindings(nextMeta.Credentials, nextEnv); err != nil {
 		return nil, err
@@ -111,45 +111,6 @@ func (m *manager) updateInstance(ctx context.Context, id string, req UpdateInsta
 		return nil, fmt.Errorf("get updated instance: %w", err)
 	}
 	return updated, nil
-}
-
-// withoutRedactionSentinels returns the env update with redaction-sentinel
-// values removed. A sentinel round-tripped from a redacted read response
-// means "no value provided", never a literal secret. Returns nil when every
-// entry is a sentinel so all-sentinel patches behave as no env update at all.
-func withoutRedactionSentinels(env map[string]string) map[string]string {
-	if len(env) == 0 {
-		return env
-	}
-	out := make(map[string]string, len(env))
-	for k, v := range env {
-		if redact.IsSentinel(v) {
-			continue
-		}
-		out[k] = v
-	}
-	if len(out) == 0 {
-		return nil
-	}
-	return out
-}
-
-// mergeEnvUpdate applies requested env updates onto the previous env. A
-// redaction sentinel round-tripped from a read response means "no value
-// provided", never a literal secret, so sentinel values are skipped. This
-// prevents a redacted read-modify-write cycle from clobbering real secrets.
-func mergeEnvUpdate(prev, req map[string]string) map[string]string {
-	next := cloneEnvMap(prev)
-	if next == nil {
-		next = make(map[string]string)
-	}
-	for k, v := range req {
-		if redact.IsSentinel(v) {
-			continue
-		}
-		next[k] = v
-	}
-	return next
 }
 
 func validateUpdateInstanceRequest(meta *metadata, req UpdateInstanceRequest) error {

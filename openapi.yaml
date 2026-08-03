@@ -1027,9 +1027,7 @@ components:
           type: object
           additionalProperties:
             type: string
-          description: |
-            Environment variables. Values are redacted ("[redacted]") in list/get
-            responses unless the request sets `include_env=true`.
+          description: Environment variables
         tags:
           $ref: "#/components/schemas/Tags"
         network:
@@ -2482,16 +2480,6 @@ paths:
             Filter instances by tag key-value pairs. Uses deepObject style:
             ?tags[team]=backend&tags[env]=staging
             Multiple entries are ANDed together. All specified key-value pairs must match.
-        - name: include_env
-          in: query
-          required: false
-          schema:
-            type: boolean
-            default: false
-          description: |
-            Include plaintext environment variable values in the response.
-            By default env values are redacted (keys are preserved, values are
-            replaced with "[redacted]").
       responses:
         200:
           description: List of instances
@@ -2581,16 +2569,6 @@ paths:
           schema:
             type: string
           description: Instance ID or name
-        - name: include_env
-          in: query
-          required: false
-          schema:
-            type: boolean
-            default: false
-          description: |
-            Include plaintext environment variable values in the response.
-            By default env values are redacted (keys are preserved, values are
-            replaced with "[redacted]").
       responses:
         200:
           description: Instance details
