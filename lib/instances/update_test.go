@@ -9,6 +9,7 @@ import (
 	"github.com/kernel/hypeman/lib/autostandby"
 	"github.com/kernel/hypeman/lib/egressproxy"
 	"github.com/kernel/hypeman/lib/healthcheck"
+	"github.com/kernel/hypeman/lib/redact"
 	snapshotstore "github.com/kernel/hypeman/lib/snapshot"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -400,4 +401,57 @@ func TestManagerUpdateInstanceHealthCheckOnlyPublishesLifecycleUpdate(t *testing
 	case <-time.After(time.Second):
 		t.Fatal("timed out waiting for lifecycle update event")
 	}
+}
+
+func TestManagerUpdateInstanceIgnoresSentinelOnlyEnvUpdateOnStoppedInstance(t *testing.T) {
+	t.Parallel()
+
+	manager, _ := setupTestManager(t)
+	id := "inst-update-sentinel-noop"
+	require.NoError(t, manager.ensureDirectories(id))
+	meta := &metadata{
+		StoredMetadata: StoredMetadata{
+			Id:         id,
+			Name:       id,
+			CreatedAt:  time.Now(),
+			DataDir:    manager.paths.InstanceDir(id),
+			SocketPath: manager.paths.InstanceSocket(id, "cloud-hypervisor.sock"),
+			NetworkEgress: &NetworkEgressPolicy{
+				Enabled: true,
+			},
+			Credentials: map[string]CredentialPolicy{
+				"OUTBOUND_OPENAI_KEY": {
+					Source: CredentialSource{Env: "OUTBOUND_OPENAI_KEY"},
+				},
+			},
+			Env: map[string]string{
+				"OUTBOUND_OPENAI_KEY": "real-secret",
+			},
+			AutoStandby: &autostandby.Policy{
+				Enabled:     false,
+				IdleTimeout: "5m0s",
+			},
+		},
+	}
+	require.NoError(t, manager.saveMetadata(meta))
+
+	updated, err := manager.UpdateInstance(context.Background(), id, UpdateInstanceRequest{
+		Env: map[string]string{
+			"OUTBOUND_OPENAI_KEY": redact.Sentinel,
+		},
+		AutoStandby: &autostandby.Policy{
+			Enabled:     true,
+			IdleTimeout: "10m",
+		},
+	})
+	require.NoError(t, err)
+	require.NotNil(t, updated)
+	require.NotNil(t, updated.AutoStandby)
+	assert.True(t, updated.AutoStandby.Enabled)
+	assert.Equal(t, "10m0s", updated.AutoStandby.IdleTimeout)
+
+	saved, err := manager.loadMetadata(id)
+	require.NoError(t, err)
+	require.NotNil(t, saved)
+	assert.Equal(t, "real-secret", saved.Env["OUTBOUND_OPENAI_KEY"])
 }

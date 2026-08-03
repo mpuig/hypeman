@@ -49,6 +49,7 @@ func (m *manager) updateInstance(ctx context.Context, id string, req UpdateInsta
 		}
 		req.RestartPolicy = normalizedRestartPolicy
 	}
+	req.Env = mergeEnvUpdate(nil, req.Env)
 
 	if err := validateUpdateInstanceRequest(meta, req); err != nil {
 		return nil, err
