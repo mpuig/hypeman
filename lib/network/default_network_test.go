@@ -9,10 +9,9 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// TestDefaultNetworkPrefersInitializedNetwork proves DefaultNetwork returns
-// the effective default network established at Initialize time, including the
-// guest-visible gateway, without touching host kernel state.
-func TestDefaultNetworkPrefersInitializedNetwork(t *testing.T) {
+// TestDefaultNetworkReturnsGuestVisibleValues proves DefaultNetwork reports
+// guest-visible gateway/subnet details for the active host networking model.
+func TestDefaultNetworkReturnsGuestVisibleValues(t *testing.T) {
 	t.Parallel()
 	cfg := &config.Config{}
 	m := NewManager(paths.New(t.TempDir()), cfg, nil).(*manager)
@@ -28,14 +27,23 @@ func TestDefaultNetworkPrefersInitializedNetwork(t *testing.T) {
 
 	nw, err := m.DefaultNetwork(context.Background())
 	require.NoError(t, err)
-	require.Equal(t, "10.100.0.1", nw.Gateway)
-	require.Equal(t, "10.100.0.0/16", nw.Subnet)
+	if NetworkModel() == "nat" {
+		require.Equal(t, "192.168.64.1", nw.Gateway)
+		require.Equal(t, "192.168.64.0/24", nw.Subnet)
+	} else {
+		require.Equal(t, "10.100.0.1", nw.Gateway)
+		require.Equal(t, "10.100.0.0/16", nw.Subnet)
+	}
 
 	// Mutating the returned copy must not affect the cached network.
 	nw.Gateway = " mutated "
 	again, err := m.DefaultNetwork(context.Background())
 	require.NoError(t, err)
-	require.Equal(t, "10.100.0.1", again.Gateway)
+	if NetworkModel() == "nat" {
+		require.Equal(t, "192.168.64.1", again.Gateway)
+	} else {
+		require.Equal(t, "10.100.0.1", again.Gateway)
+	}
 }
 
 func TestGuestToGuestEnabled(t *testing.T) {
