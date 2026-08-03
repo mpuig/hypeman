@@ -21,6 +21,11 @@ type updateInstanceRulesService interface {
 func (m *manager) updateInstance(ctx context.Context, id string, req UpdateInstanceRequest) (*Instance, error) {
 	log := logger.FromContext(ctx)
 
+	// Drop redaction sentinels up front: a read-modify-write that round-trips
+	// only redacted env values is not an env mutation, so it must not trigger
+	// the running-state requirement or the egress-proxy path.
+	req.Env = withoutRedactionSentinels(req.Env)
+
 	// 1. Load and validate current state
 	meta, err := m.loadMetadata(id)
 	if err != nil {
@@ -106,6 +111,27 @@ func (m *manager) updateInstance(ctx context.Context, id string, req UpdateInsta
 		return nil, fmt.Errorf("get updated instance: %w", err)
 	}
 	return updated, nil
+}
+
+// withoutRedactionSentinels returns the env update with redaction-sentinel
+// values removed. A sentinel round-tripped from a redacted read response
+// means "no value provided", never a literal secret. Returns nil when every
+// entry is a sentinel so all-sentinel patches behave as no env update at all.
+func withoutRedactionSentinels(env map[string]string) map[string]string {
+	if len(env) == 0 {
+		return env
+	}
+	out := make(map[string]string, len(env))
+	for k, v := range env {
+		if redact.IsSentinel(v) {
+			continue
+		}
+		out[k] = v
+	}
+	if len(out) == 0 {
+		return nil
+	}
+	return out
 }
 
 // mergeEnvUpdate applies requested env updates onto the previous env. A

@@ -110,3 +110,24 @@ func TestMergeEnvUpdateSkipsRedactionSentinel(t *testing.T) {
 	next = mergeEnvUpdate(nil, map[string]string{"A": "1"})
 	require.Equal(t, map[string]string{"A": "1"}, next)
 }
+
+// TestWithoutRedactionSentinels proves an all-sentinel env patch collapses to
+// no env update (so it skips the running-state and egress-proxy paths), while
+// mixed patches keep only real values.
+func TestWithoutRedactionSentinels(t *testing.T) {
+	t.Parallel()
+
+	require.Nil(t, withoutRedactionSentinels(map[string]string{
+		"API_KEY": redact.Sentinel,
+		"OTHER":   redact.Sentinel,
+	}), "all-sentinel patch must not count as an env update")
+
+	require.Equal(t, map[string]string{"PLAIN": "new"},
+		withoutRedactionSentinels(map[string]string{
+			"API_KEY": redact.Sentinel,
+			"PLAIN":   "new",
+		}))
+
+	require.Nil(t, withoutRedactionSentinels(nil))
+	require.Empty(t, withoutRedactionSentinels(map[string]string{}))
+}
