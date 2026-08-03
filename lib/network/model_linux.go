@@ -14,3 +14,10 @@ func NetworkModel() string {
 func GuestToGuestEnabled(n *Network) bool {
 	return n != nil && !n.Isolated
 }
+
+// preferCachedDefaultNetwork reports whether DefaultNetwork should trust the
+// network cached during Initialize. On Linux the cache mirrors the bridge
+// built from config, so it is authoritative.
+func preferCachedDefaultNetwork() bool {
+	return true
+}

@@ -167,12 +167,16 @@ func (m *manager) setDefaultNetwork(network *Network) {
 	m.defaultNetwork = cloneNetwork(network)
 }
 
-// DefaultNetwork returns the effective default network. It prefers the
-// network established during Initialize and falls back to querying live
-// host state (kernel bridge on Linux, the vz NAT stub on macOS).
+// DefaultNetwork returns the effective default network. On Linux it prefers
+// the network established during Initialize (bridge state mirrors config).
+// On macOS the configured subnet/gateway are ignored — guests use vz NAT —
+// so the live NAT stub from queryNetworkState is authoritative and the
+// config-derived cache is never guest-visible.
 func (m *manager) DefaultNetwork(ctx context.Context) (*Network, error) {
-	if network := m.cachedDefaultNetwork(); network != nil {
-		return network, nil
+	if preferCachedDefaultNetwork() {
+		if network := m.cachedDefaultNetwork(); network != nil {
+			return network, nil
+		}
 	}
 	return m.getDefaultNetwork(ctx)
 }

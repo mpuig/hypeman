@@ -14,3 +14,11 @@ func NetworkModel() string {
 func GuestToGuestEnabled(_ *Network) bool {
 	return false
 }
+
+// preferCachedDefaultNetwork reports whether DefaultNetwork should trust the
+// network cached during Initialize. On macOS the configured subnet/gateway
+// are ignored (vz NAT assigns 192.168.64.0/24 with host gateway 192.168.64.1),
+// so the cache is not guest-visible and live NAT state must win.
+func preferCachedDefaultNetwork() bool {
+	return false
+}
