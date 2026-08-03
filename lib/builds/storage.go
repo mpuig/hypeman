@@ -64,6 +64,10 @@ func writeMetadata(p *paths.Paths, meta *buildMetadata) error {
 	if err := os.WriteFile(tempPath, data, 0600); err != nil {
 		return fmt.Errorf("write temp metadata: %w", err)
 	}
+	// WriteFile does not change permissions of an existing file.
+	if err := os.Chmod(tempPath, 0600); err != nil {
+		return fmt.Errorf("chmod temp metadata: %w", err)
+	}
 
 	finalPath := p.BuildMetadata(meta.ID)
 	if err := os.Rename(tempPath, finalPath); err != nil {
