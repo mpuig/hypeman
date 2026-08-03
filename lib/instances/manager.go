@@ -27,6 +27,9 @@ import (
 
 type Manager interface {
 	ListInstances(ctx context.Context, filter *ListInstancesFilter) ([]Instance, error)
+	// DefaultHypervisor returns the effective default hypervisor type used for
+	// launches that do not specify one.
+	DefaultHypervisor() hypervisor.Type
 	ListSnapshots(ctx context.Context, filter *ListSnapshotsFilter) ([]Snapshot, error)
 	GetSnapshot(ctx context.Context, snapshotID string) (*Snapshot, error)
 	CreateInstance(ctx context.Context, req CreateInstanceRequest) (*Instance, error)
@@ -304,6 +307,10 @@ func NewManagerWithConfigE(p *paths.Paths, imageManager images.Manager, systemMa
 	if err := m.recoverPendingStandbyCompressionJobs(context.Background()); err != nil {
 		logger.FromContext(context.Background()).WarnContext(context.Background(), "failed to recover pending standby compression jobs", "error", err)
 	}
+
+	// Restrict permissions on metadata written by older versions (may be 0644
+	// and contains env values / credential bindings).
+	m.tightenMetadataPermissions()
 
 	return m, nil
 }
@@ -688,6 +695,12 @@ func (m *manager) UpdateInstance(ctx context.Context, id string, req UpdateInsta
 		m.notifyLifecycleEvent(ctx, LifecycleEventUpdate, inst)
 	}
 	return inst, err
+}
+
+// DefaultHypervisor returns the effective default hypervisor type used for
+// launches that do not specify one.
+func (m *manager) DefaultHypervisor() hypervisor.Type {
+	return m.defaultHypervisor
 }
 
 // ListInstances returns instances, optionally filtered by the given criteria.

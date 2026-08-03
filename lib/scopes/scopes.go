@@ -209,8 +209,9 @@ var RouteScopes = map[string]Scope{
 	"DELETE /devices/{id}":   DeviceDelete,
 	"GET /devices/{id}":      DeviceRead,
 
-	// Health & Resources
+	// Health, Capabilities & Resources
 	"GET /health":                    ResourceRead,
+	"GET /capabilities":              ResourceRead,
 	"GET /resources":                 ResourceRead,
 	"POST /resources/memory/reclaim": ResourceWrite,
 

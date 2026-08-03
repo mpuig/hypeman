@@ -19,6 +19,7 @@ import (
 	mw "github.com/kernel/hypeman/lib/middleware"
 	"github.com/kernel/hypeman/lib/network"
 	"github.com/kernel/hypeman/lib/oapi"
+	"github.com/kernel/hypeman/lib/redact"
 	"github.com/kernel/hypeman/lib/resources"
 	"github.com/kernel/hypeman/lib/snapshot"
 	"github.com/kernel/hypeman/lib/vm_metrics"
@@ -54,6 +55,9 @@ func (s *ApiService) ListInstances(ctx context.Context, request oapi.ListInstanc
 	oapiInsts := make([]oapi.Instance, len(domainInsts))
 	for i, inst := range domainInsts {
 		oapiInsts[i] = instanceToOAPI(inst)
+		if !includeEnv(request.Params.IncludeEnv) {
+			redactInstanceEnv(&oapiInsts[i])
+		}
 	}
 
 	return oapi.ListInstances200JSONResponse(oapiInsts), nil
@@ -411,7 +415,11 @@ func (s *ApiService) GetInstance(ctx context.Context, request oapi.GetInstanceRe
 			Message: "resource not resolved",
 		}, nil
 	}
-	return oapi.GetInstance200JSONResponse(instanceToOAPI(*inst)), nil
+	oapiInst := instanceToOAPI(*inst)
+	if !includeEnv(request.Params.IncludeEnv) {
+		redactInstanceEnv(&oapiInst)
+	}
+	return oapi.GetInstance200JSONResponse(oapiInst), nil
 }
 
 // GetInstanceStats returns resource utilization statistics for an instance
@@ -1319,4 +1327,20 @@ func parseOptionalDuration(value string, field string) (*time.Duration, error) {
 		return nil, fmt.Errorf("%s cannot be negative", field)
 	}
 	return &duration, nil
+}
+
+// includeEnv reports whether the caller opted in to plaintext env values.
+func includeEnv(param *bool) bool {
+	return param != nil && *param
+}
+
+// redactInstanceEnv replaces env values with the redaction sentinel,
+// preserving keys. Env values are secrets; read APIs redact them unless the
+// caller explicitly passes include_env=true.
+func redactInstanceEnv(inst *oapi.Instance) {
+	if inst.Env == nil {
+		return
+	}
+	redacted := redact.Values(*inst.Env)
+	inst.Env = &redacted
 }

@@ -35,6 +35,10 @@ type Manager interface {
 	ListAllocations(ctx context.Context) ([]Allocation, error)
 	NameExists(ctx context.Context, name string, excludeInstanceID string) (bool, error)
 
+	// DefaultNetwork returns the effective default network, including the
+	// guest-visible host gateway and subnet for this host's networking model.
+	DefaultNetwork(ctx context.Context) (*Network, error)
+
 	// CleanupOrphanedTAPs removes TAP devices not associated with any preserved
 	// instance. Pass minAge>0 to skip TAPs younger than that, which avoids racing
 	// against in-flight CreateAllocation calls whose metadata hasn't been persisted.
@@ -161,6 +165,16 @@ func (m *manager) setDefaultNetwork(network *Network) {
 	m.networkMu.Lock()
 	defer m.networkMu.Unlock()
 	m.defaultNetwork = cloneNetwork(network)
+}
+
+// DefaultNetwork returns the effective default network. It prefers the
+// network established during Initialize and falls back to querying live
+// host state (kernel bridge on Linux, the vz NAT stub on macOS).
+func (m *manager) DefaultNetwork(ctx context.Context) (*Network, error) {
+	if network := m.cachedDefaultNetwork(); network != nil {
+		return network, nil
+	}
+	return m.getDefaultNetwork(ctx)
 }
 
 // getDefaultNetwork gets the default network details from kernel state

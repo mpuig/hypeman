@@ -8,6 +8,7 @@ import (
 
 	"github.com/kernel/hypeman/lib/egressproxy"
 	"github.com/kernel/hypeman/lib/logger"
+	"github.com/kernel/hypeman/lib/redact"
 )
 
 type updateInstanceRulesService interface {
@@ -82,13 +83,7 @@ func (m *manager) updateInstance(ctx context.Context, id string, req UpdateInsta
 	}
 
 	prevEnv := cloneEnvMap(nextMeta.Env)
-	nextEnv := cloneEnvMap(nextMeta.Env)
-	if nextEnv == nil {
-		nextEnv = make(map[string]string)
-	}
-	for k, v := range req.Env {
-		nextEnv[k] = v
-	}
+	nextEnv := mergeEnvUpdate(prevEnv, req.Env)
 
 	if err := validateCredentialEnvBindings(nextMeta.Credentials, nextEnv); err != nil {
 		return nil, err
@@ -111,6 +106,24 @@ func (m *manager) updateInstance(ctx context.Context, id string, req UpdateInsta
 		return nil, fmt.Errorf("get updated instance: %w", err)
 	}
 	return updated, nil
+}
+
+// mergeEnvUpdate applies requested env updates onto the previous env. A
+// redaction sentinel round-tripped from a read response means "no value
+// provided", never a literal secret, so sentinel values are skipped. This
+// prevents a redacted read-modify-write cycle from clobbering real secrets.
+func mergeEnvUpdate(prev, req map[string]string) map[string]string {
+	next := cloneEnvMap(prev)
+	if next == nil {
+		next = make(map[string]string)
+	}
+	for k, v := range req {
+		if redact.IsSentinel(v) {
+			continue
+		}
+		next[k] = v
+	}
+	return next
 }
 
 func validateUpdateInstanceRequest(meta *metadata, req UpdateInstanceRequest) error {

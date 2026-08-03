@@ -58,9 +58,10 @@ func writeMetadata(p *paths.Paths, meta *buildMetadata) error {
 		return fmt.Errorf("marshal metadata: %w", err)
 	}
 
-	// Write atomically via temp file
+	// Write atomically via temp file. Build metadata embeds the original
+	// request (build args, secret references), so keep it owner-only.
 	tempPath := p.BuildMetadata(meta.ID) + ".tmp"
-	if err := os.WriteFile(tempPath, data, 0644); err != nil {
+	if err := os.WriteFile(tempPath, data, 0600); err != nil {
 		return fmt.Errorf("write temp metadata: %w", err)
 	}
 
@@ -232,7 +233,8 @@ func writeBuildConfig(p *paths.Paths, id string, config *BuildConfig) error {
 	}
 
 	configPath := p.BuildConfig(id)
-	if err := os.WriteFile(configPath, data, 0644); err != nil {
+	// The build config carries the registry push token and build args.
+	if err := os.WriteFile(configPath, data, 0600); err != nil {
 		return fmt.Errorf("write build config: %w", err)
 	}
 

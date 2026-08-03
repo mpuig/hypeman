@@ -539,3 +539,53 @@ func TestValidateAllowsDisabledSnapshotCompressionDefaultWithoutValidAlgorithm(t
 		t.Fatalf("expected disabled snapshot compression default to ignore algorithm/level, got %v", err)
 	}
 }
+
+func TestConfigFilePermTooOpen(t *testing.T) {
+	tmp := t.TempDir()
+	cfgPath := filepath.Join(tmp, "config.yaml")
+
+	write := func(mode os.FileMode) {
+		if err := os.WriteFile(cfgPath, []byte("jwt_secret: test-secret\n"), mode); err != nil {
+			t.Fatalf("write temp config: %v", err)
+		}
+		// WriteFile does not change perms of an existing file; chmod explicitly.
+		if err := os.Chmod(cfgPath, mode); err != nil {
+			t.Fatalf("chmod temp config: %v", err)
+		}
+	}
+
+	write(0600)
+	if configFilePermTooOpen(cfgPath) {
+		t.Fatalf("0600 config file must not be flagged")
+	}
+	write(0640)
+	if !configFilePermTooOpen(cfgPath) {
+		t.Fatalf("0640 config file must be flagged")
+	}
+	write(0644)
+	if !configFilePermTooOpen(cfgPath) {
+		t.Fatalf("0644 config file must be flagged")
+	}
+	if configFilePermTooOpen(filepath.Join(tmp, "missing.yaml")) {
+		t.Fatalf("missing file must not be flagged")
+	}
+}
+
+func TestLoadSucceedsWithWorldReadableConfigFile(t *testing.T) {
+	clearPathEnvOverrides(t)
+
+	tmp := t.TempDir()
+	cfgPath := filepath.Join(tmp, "config.yaml")
+	if err := os.WriteFile(cfgPath, []byte("jwt_secret: test-secret\n"), 0644); err != nil {
+		t.Fatalf("write temp config: %v", err)
+	}
+
+	// A too-open config file only warns; it must not break loading.
+	cfg, err := Load(cfgPath)
+	if err != nil {
+		t.Fatalf("load config: %v", err)
+	}
+	if cfg.JwtSecret != "test-secret" {
+		t.Fatalf("expected jwt_secret from config file, got %q", cfg.JwtSecret)
+	}
+}

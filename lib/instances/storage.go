@@ -1,6 +1,7 @@
 package instances
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -13,6 +14,7 @@ import (
 	"github.com/kernel/hypeman/lib/healthcheck"
 	"github.com/kernel/hypeman/lib/hypervisor"
 	"github.com/kernel/hypeman/lib/images"
+	"github.com/kernel/hypeman/lib/logger"
 )
 
 const (
@@ -106,7 +108,9 @@ func (m *manager) saveMetadata(meta *metadata) error {
 		tmp.Close()
 		return fmt.Errorf("write temporary metadata: %w", err)
 	}
-	if err := tmp.Chmod(0644); err != nil {
+	// Instance metadata contains environment variable values and credential
+	// bindings, so it must never be world-readable.
+	if err := tmp.Chmod(0600); err != nil {
 		tmp.Close()
 		return fmt.Errorf("chmod temporary metadata: %w", err)
 	}
@@ -121,6 +125,33 @@ func (m *manager) saveMetadata(meta *metadata) error {
 	m.syncAdmissionAllocation(meta)
 
 	return nil
+}
+
+// tightenMetadataPermissions restricts existing instance metadata files to
+// owner-only access. Metadata written before restrictive permissions were
+// introduced may be mode 0644; it contains env values and credential
+// bindings. Best-effort: individual failures are logged, not fatal.
+func (m *manager) tightenMetadataPermissions() {
+	log := logger.FromContext(context.Background())
+	entries, err := os.ReadDir(m.paths.GuestsDir())
+	if err != nil {
+		return // no guests directory yet
+	}
+	for _, entry := range entries {
+		if !entry.IsDir() {
+			continue
+		}
+		metaPath := m.paths.InstanceMetadata(entry.Name())
+		info, err := os.Stat(metaPath)
+		if err != nil {
+			continue
+		}
+		if info.Mode().Perm() != 0600 {
+			if err := os.Chmod(metaPath, 0600); err != nil {
+				log.Warn("failed to tighten instance metadata permissions", "path", metaPath, "error", err)
+			}
+		}
+	}
 }
 
 // createOverlayDisk creates a sparse overlay disk for the instance
