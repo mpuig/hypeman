@@ -147,7 +147,7 @@ func (m *manager) deleteInstanceWithOptions(
 	// VMM has already been stopped, but its attachments are intact and the
 	// restart policy is blocked, so a retried delete is safe.
 	hadVGPUAssignment := storedVGPUDevicePath(stored) != ""
-	if err := releaseStoredVGPU(ctx, stored); err != nil {
+	if err := m.releaseStoredVGPU(ctx, stored); err != nil {
 		log.ErrorContext(ctx, "failed to destroy vGPU; retaining instance metadata", "instance_id", id, "error", err)
 		return fmt.Errorf("destroy vGPU: %w", err)
 	}
