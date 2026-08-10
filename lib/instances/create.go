@@ -336,6 +336,7 @@ func (m *manager) createInstance(
 						GPUFramework:      gpuDevice.Framework,
 						GPUDevicePath:     gpuDevice.SysfsPath,
 						GPUMdevUUID:       gpuDevice.MdevUUID,
+						GPUAssignedAt:     gpuAssignedAt,
 					}
 				}
 			}
@@ -636,6 +637,7 @@ func (m *manager) cleanupFailedCreate(ctx context.Context, id string, retainedVG
 		GPUFramework:  retainedVGPU.GPUFramework,
 		GPUDevicePath: retainedVGPU.GPUDevicePath,
 		GPUMdevUUID:   retainedVGPU.GPUMdevUUID,
+		GPUAssignedAt: retainedVGPU.GPUAssignedAt,
 	}
 	if err := m.saveMetadata(&metadata{StoredMetadata: retained}); err != nil {
 		log.ErrorContext(ctx, "failed to retain vGPU assignment metadata after cleanup failure", "instance_id", id, "error", err)
