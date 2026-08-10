@@ -103,6 +103,7 @@ func (m *manager) createInstance(
 	if hvType == "" {
 		hvType = m.defaultHypervisor
 	}
+
 	// 2. Validate image exists and is ready; auto-pull if not found
 	log.DebugContext(ctx, "validating image", "image", req.Image)
 	imageCtx, imageSpanEnd := m.startLifecycleStep(ctx, "resolve_image",
@@ -294,16 +295,18 @@ func (m *manager) createInstance(
 		gpuFramework = gpuDevice.Framework
 		gpuDevicePath = gpuDevice.SysfsPath
 		gpuMdevUUID = gpuDevice.MdevUUID
+		log.InfoContext(ctx, "created vGPU", "instance_id", id, "profile", gpuProfile, "uuid", gpuMdevUUID)
 
 		// Add vGPU cleanup to stack
 		cu.Add(func() {
+			log.DebugContext(ctx, "destroying vGPU on cleanup", "instance_id", id, "uuid", gpuDevice.MdevUUID)
 			assignment := devices.VGPUAssignment{
 				Framework:  gpuDevice.Framework,
 				DevicePath: gpuDevice.SysfsPath,
 				MdevUUID:   gpuDevice.MdevUUID,
 			}
 			if err := devices.DestroyVGPU(ctx, assignment); err != nil {
-				log.WarnContext(ctx, "failed to destroy vGPU on cleanup", "instance_id", id, "error", err)
+				log.WarnContext(ctx, "failed to destroy vGPU on cleanup", "instance_id", id, "uuid", gpuDevice.MdevUUID, "error", err)
 			}
 		})
 	}
