@@ -48,6 +48,7 @@ func (m *manager) startInstance(
 		log.ErrorContext(ctx, "invalid state for start", "instance_id", id, "state", inst.State)
 		return nil, fmt.Errorf("%w: cannot start from state %s, must be Stopped", ErrInvalidState, inst.State)
 	}
+
 	// Release any assignment retained by an earlier failed release and
 	// persist the cleared fields immediately, so a failure later in start
 	// cannot leave on-disk metadata pointing at a device that is already
@@ -168,8 +169,10 @@ func (m *manager) startInstance(
 			return nil, fmt.Errorf("create vGPU mdev for profile %s: %w", stored.GPUProfile, err)
 		}
 		setStoredVGPUDevice(stored, device)
+		log.InfoContext(ctx, "created vGPU", "instance_id", id, "profile", stored.GPUProfile, "uuid", device.MdevUUID)
 		// Add vGPU cleanup to stack
 		cu.Add(func() {
+			log.DebugContext(ctx, "destroying vGPU on cleanup", "instance_id", id, "uuid", device.MdevUUID)
 			assignment := devices.VGPUAssignment{
 				Framework:  device.Framework,
 				DevicePath: device.SysfsPath,
@@ -177,7 +180,7 @@ func (m *manager) startInstance(
 				InstanceID: id,
 			}
 			if err := devices.DestroyVGPU(ctx, assignment); err != nil {
-				log.WarnContext(ctx, "failed to destroy vGPU on cleanup", "instance_id", id, "error", err)
+				log.WarnContext(ctx, "failed to destroy vGPU on cleanup", "instance_id", id, "uuid", device.MdevUUID, "error", err)
 			}
 		})
 	}

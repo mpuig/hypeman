@@ -259,9 +259,13 @@ func (m *manager) stopInstance(
 		}
 	}
 
-	// 7. Release the vGPU assignment if present.
-	if err := releaseStoredVGPU(ctx, stored); err != nil {
-		log.WarnContext(ctx, "failed to destroy vGPU on stop; retaining assignment metadata", "instance_id", id, "error", err)
+	// 7. Release the vGPU assignment if present (frees the vGPU slot for other VMs).
+	if storedVGPUDevicePath(stored) != "" {
+		log.InfoContext(ctx, "destroying vGPU on stop", "instance_id", id, "uuid", stored.GPUMdevUUID)
+		if err := releaseStoredVGPU(ctx, stored); err != nil {
+			// Log error but continue - vGPU cleanup is best-effort
+			log.WarnContext(ctx, "failed to destroy vGPU on stop; retaining assignment metadata", "instance_id", id, "uuid", stored.GPUMdevUUID, "error", err)
+		}
 	}
 
 	// 8. Always remove stale runtime sockets after process exit.
