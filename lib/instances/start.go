@@ -47,11 +47,6 @@ func (m *manager) startInstance(
 		log.ErrorContext(ctx, "invalid state for start", "instance_id", id, "state", inst.State)
 		return nil, fmt.Errorf("%w: cannot start from state %s, must be Stopped", ErrInvalidState, inst.State)
 	}
-	if stored.GPUProfile != "" {
-		if err := validateVGPUHypervisor(stored.HypervisorType); err != nil {
-			return nil, fmt.Errorf("%w: %w", ErrInvalidState, err)
-		}
-	}
 	// Release any assignment retained by an earlier failed release and
 	// persist the cleared fields immediately, so a failure later in start
 	// cannot leave on-disk metadata pointing at a device that is already
@@ -176,8 +171,9 @@ func (m *manager) startInstance(
 		if err != nil {
 			if pendingDevice, ok := vgpuDevicePendingCleanup(err); ok {
 				assignedAt := m.nowUTC()
-				setStoredVGPUDevice(stored, pendingDevice, assignedAt)
-				if saveErr := m.saveMetadata(meta); saveErr != nil {
+				retentionMeta := rollbackMeta
+				setStoredVGPUDevice(&retentionMeta.StoredMetadata, pendingDevice, assignedAt)
+				if saveErr := m.saveMetadata(&retentionMeta); saveErr != nil {
 					log.ErrorContext(ctx, "failed to retain vGPU assignment after create rollback failure", "instance_id", id, "error", saveErr)
 					return nil, fmt.Errorf("create vGPU for profile %s: %w; retain assignment: %v", stored.GPUProfile, err, saveErr)
 				}
