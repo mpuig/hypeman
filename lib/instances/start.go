@@ -47,6 +47,7 @@ func (m *manager) startInstance(
 		log.ErrorContext(ctx, "invalid state for start", "instance_id", id, "state", inst.State)
 		return nil, fmt.Errorf("%w: cannot start from state %s, must be Stopped", ErrInvalidState, inst.State)
 	}
+
 	// Release any assignment retained by an earlier failed release and
 	// persist the cleared fields immediately, so a failure later in start
 	// cannot leave on-disk metadata pointing at a device that is already
@@ -183,6 +184,7 @@ func (m *manager) startInstance(
 		}
 		assignedAt := m.nowUTC()
 		setStoredVGPUDevice(stored, device, assignedAt)
+		log.InfoContext(ctx, "created vGPU", "instance_id", id, "profile", stored.GPUProfile, "uuid", device.MdevUUID)
 		// Add vGPU cleanup to stack
 		cu.Add(func() {
 			m.cleanupStartVGPU(ctx, id, device, assignedAt, rollbackMeta)

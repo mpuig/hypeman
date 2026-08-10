@@ -86,6 +86,7 @@ func clearStoredVGPUDevice(stored *StoredMetadata) {
 }
 
 func (m *manager) cleanupStartVGPU(ctx context.Context, instanceID string, device *devices.VGPUDevice, assignedAt time.Time, rollbackMeta metadata) {
+	logger.FromContext(ctx).DebugContext(ctx, "destroying vGPU on cleanup", "instance_id", instanceID, "uuid", device.MdevUUID)
 	assignment := devices.VGPUAssignment{
 		Framework:  device.Framework,
 		DevicePath: device.SysfsPath,
@@ -95,7 +96,7 @@ func (m *manager) cleanupStartVGPU(ctx context.Context, instanceID string, devic
 	cleanupMeta := rollbackMeta
 	releaseErr := m.destroyVGPUAssignment(ctx, assignment)
 	if releaseErr != nil {
-		logger.FromContext(ctx).WarnContext(ctx, "failed to destroy vGPU on cleanup", "instance_id", instanceID, "error", releaseErr)
+		logger.FromContext(ctx).WarnContext(ctx, "failed to destroy vGPU on cleanup", "instance_id", instanceID, "uuid", device.MdevUUID, "error", releaseErr)
 		setStoredVGPUDevice(&cleanupMeta.StoredMetadata, device, assignedAt)
 	}
 	if err := m.saveMetadata(&cleanupMeta); err != nil {
