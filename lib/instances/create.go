@@ -318,7 +318,6 @@ func (m *manager) createInstance(
 				MdevUUID:   gpuDevice.MdevUUID,
 				InstanceID: id,
 			}
-			log.DebugContext(ctx, "destroying vGPU on cleanup", "instance_id", id, "uuid", gpuDevice.MdevUUID)
 			if err := m.destroyVGPUAssignment(ctx, assignment); err != nil {
 				log.WarnContext(ctx, "failed to destroy vGPU on cleanup", "instance_id", id, "uuid", gpuDevice.MdevUUID, "error", err)
 				retainedVGPU = stored
